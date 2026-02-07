@@ -17,7 +17,7 @@ export interface WebhookBody {
     orderId: string;
     paymentKey: string;
     data: {
-        status: string; // "DONE", "CANCELED", "ABORTED", etc.
+        status: string;
         orderId: string;
         paymentKey?: string;
         amount?: number;

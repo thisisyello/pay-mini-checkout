@@ -19,7 +19,7 @@ export default function PayPage() {
         });
         const data = await res.json();
         if (!res.ok) return setMsg(`error: ${data?.error ?? "unknown"}`);
-        setMsg("PAID ✅");
+        setMsg("PAID");
         router.push(`/result/${orderId}`);
     }
 

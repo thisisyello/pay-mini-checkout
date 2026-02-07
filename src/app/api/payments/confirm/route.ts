@@ -17,7 +17,6 @@ export async function GET(req: Request) {
     }
 
     try {
-        // 🔥 Security Check: Verify amount against DB
         const order = await prisma.order.findUnique({
             where: { id: orderId },
         });
@@ -28,7 +27,6 @@ export async function GET(req: Request) {
             );
         }
 
-        // Check if amount matches
         if (order.amount !== Number(amount)) {
             console.error(
                 `[Payment Security] Amount mismatch! Order: ${order.amount}, Request: ${amount}`,
@@ -38,7 +36,6 @@ export async function GET(req: Request) {
             );
         }
 
-        // Proceed with Toss Payments Confirmation
         const secretKey = process.env.TOSS_SECRET_KEY!;
         const encodedKey = Buffer.from(`${secretKey}:`).toString("base64");
 
@@ -68,7 +65,6 @@ export async function GET(req: Request) {
             );
         }
 
-        // Update DB status
         await prisma.order.update({
             where: { id: orderId },
             data: {
