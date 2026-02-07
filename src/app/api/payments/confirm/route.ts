@@ -1,36 +1,89 @@
-export const runtime = "nodejs";
-
-import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 
-export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
-  const orderId = body?.orderId;
-  const token = body?.token;
+export const dynamic = "force-dynamic";
 
-  if (typeof orderId !== "string" || typeof token !== "string") {
-    return NextResponse.json({ error: "Invalid input" }, { status: 400 });
-  }
+export async function GET(req: Request) {
+    const { searchParams } = new URL(req.url);
 
-  // 토큰 일치 + 아직 사용 안 됨 + CREATED 상태일 때만 PAID로 전이
-  const updated = await prisma.order.updateMany({
-    where: {
-      id: orderId,
-      status: "CREATED",
-      paymentToken: token,
-      paymentUsedAt: null,
-    },
-    data: {
-      status: "PAID",
-      paidAt: new Date(),
-      paymentUsedAt: new Date(),
-    },
-  });
+    const paymentKey = searchParams.get("paymentKey");
+    const orderId = searchParams.get("orderId");
+    const amount = searchParams.get("amount");
 
-  if (updated.count === 0) {
-    // 위조/재시도/이미 결제됨/토큰 불일치
-    return NextResponse.json({ error: "Payment not valid" }, { status: 409 });
-  }
+    if (!paymentKey || !orderId || !amount) {
+        return NextResponse.redirect(
+            `${process.env.NEXT_PUBLIC_APP_URL}/checkout?error=missing_params`,
+        );
+    }
 
-  return NextResponse.json({ ok: true });
+    try {
+        // 🔥 Security Check: Verify amount against DB
+        const order = await prisma.order.findUnique({
+            where: { id: orderId },
+        });
+
+        if (!order) {
+            return NextResponse.redirect(
+                `${process.env.NEXT_PUBLIC_APP_URL}/checkout?error=order_not_found`,
+            );
+        }
+
+        // Check if amount matches
+        if (order.amount !== Number(amount)) {
+            console.error(
+                `[Payment Security] Amount mismatch! Order: ${order.amount}, Request: ${amount}`,
+            );
+            return NextResponse.redirect(
+                `${process.env.NEXT_PUBLIC_APP_URL}/checkout?error=amount_mismatch`,
+            );
+        }
+
+        // Proceed with Toss Payments Confirmation
+        const secretKey = process.env.TOSS_SECRET_KEY!;
+        const encodedKey = Buffer.from(`${secretKey}:`).toString("base64");
+
+        const response = await fetch(
+            "https://api.tosspayments.com/v1/payments/confirm",
+            {
+                method: "POST",
+                headers: {
+                    Authorization: `Basic ${encodedKey}`,
+                    "Content-Type": "application/json",
+                    "Idempotency-Key": crypto.randomUUID(),
+                },
+                body: JSON.stringify({
+                    paymentKey,
+                    orderId,
+                    amount: Number(amount),
+                }),
+            },
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            console.error(data);
+            return NextResponse.redirect(
+                `${process.env.NEXT_PUBLIC_APP_URL}/checkout?error=confirm_failed`,
+            );
+        }
+
+        // Update DB status
+        await prisma.order.update({
+            where: { id: orderId },
+            data: {
+                status: "PAID",
+                paidAt: new Date(),
+            },
+        });
+
+        return NextResponse.redirect(
+            `${process.env.NEXT_PUBLIC_APP_URL}/result/${orderId}`,
+        );
+    } catch (err) {
+        console.error(err);
+        return NextResponse.redirect(
+            `${process.env.NEXT_PUBLIC_APP_URL}/checkout?error=server_error`,
+        );
+    }
 }
