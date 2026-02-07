@@ -6,18 +6,18 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model Order {
-  id        String   @id @default(cuid())
-  amount    Int
-  currency  String   @default("KRW")
-  status    String   @default("CREATED") // CREATED | PAID | FAILED
-  createdAt DateTime @default(now())
-  paidAt    DateTime?
-  paidAtKst String?
-  paymentToken  String?  @unique
+  id            String    @id @default(cuid())
+  amount        Int
+  currency      String    @default("KRW")
+  status        String    @default("CREATED") // CREATED | PAID | FAILED
+  createdAt     DateTime  @default(now())
+  paidAt        DateTime?
+  paidAtKst     String?
+  paymentToken  String?   @unique
   paymentUsedAt DateTime?
 }
